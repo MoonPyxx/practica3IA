@@ -224,6 +224,9 @@ void AIPlayer::think(color &c_piece, int &id_piece, int &dice) const
         break;
     }
 }
+
+ // HEURISTICA 1
+
 double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
     int ganador = estado.getWinner();
     int oponente = (jugador + 1) % 2;
@@ -240,21 +243,21 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
         double puntuacion_jugador = 0.0;
 
         if (estado.getCurrentPlayerId() == jugador) {
-            if (estado.isEatingMove()) {
+            if (estado.isEatingMove()) { // si come
                 pair<color, int> piezaComida = estado.eatenPiece();
                 if (piezaComida.first == my_colors[0] || piezaComida.first == my_colors[1]) {
-                    puntuacion_jugador += 5; // Penaliza menos si come una propia
+                    puntuacion_jugador += 1; // Penaliza menos si come una propia
                 } else {
                     puntuacion_jugador += 100; // Valor más alto si come una del oponente
                 }
-            } else if (estado.isGoalMove()) {
+            } else if (estado.isGoalMove()) { // si ha metido ficha
                 puntuacion_jugador += 50; // Más puntos por mover una ficha a la meta
             } else {
                 auto piezasDestruidas = estado.piecesDestroyedLastMove();
-                if (!piezasDestruidas.empty()) {
+                if (!piezasDestruidas.empty()) { // si ha destruido piezas del rival suma, si suyas resta
                     for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
                         if (it->first == my_colors[0] || it->first == my_colors[1]) {
-                            puntuacion_jugador -= 20; // Penaliza si destruye una propia
+                            puntuacion_jugador -= 40; // Penaliza si destruye una propia
                         } else {
                             puntuacion_jugador += 40; // Aumenta si destruye una del oponente
                         }
@@ -262,13 +265,13 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
                 } else if (estado.getItemAcquired() != -1) {
                     puntuacion_jugador += 20; // Más puntos por adquirir un objeto
                 } else if (estado.goalBounce()) {
-                    puntuacion_jugador -= 10; // Penaliza más por rebotar en la meta
+                    puntuacion_jugador -= 1; // Penaliza más por rebotar en la meta
                 }
             }
         }
 
         for (color c : my_colors) {
-            puntuacion_jugador -= estado.piecesAtHome(c) * 3; // Penaliza más las piezas en casa
+            puntuacion_jugador -= estado.piecesAtHome(c) * 2; // Penaliza más las piezas en casa
             for (int j = 0; j < num_pieces; j++) {
                 puntuacion_jugador += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 8;
             }
@@ -280,7 +283,7 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
             if (estado.isEatingMove()) {
                 pair<color, int> piezaComida = estado.eatenPiece();
                 if (piezaComida.first == op_colors[0] || piezaComida.first == op_colors[1]) {
-                    puntuacion_oponente += 5;
+                    puntuacion_oponente += 1;
                 } else {
                     puntuacion_oponente += 100;
                 }
@@ -291,7 +294,7 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
                 if (!piezasDestruidas.empty()) {
                     for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
                         if (it->first == op_colors[0] || it->first == op_colors[1]) {
-                            puntuacion_oponente -= 20;
+                            puntuacion_oponente -= 40;
                         } else {
                             puntuacion_oponente += 40;
                         }
@@ -299,13 +302,13 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
                 } else if (estado.getItemAcquired() != -1) {
                     puntuacion_oponente += 20;
                 } else if (estado.goalBounce()) {
-                    puntuacion_oponente -= 10;
+                    puntuacion_oponente -= 1;
                 }
             }
         }
 
         for (color c : op_colors) {
-            puntuacion_oponente -= estado.piecesAtHome(c) * 3;
+            puntuacion_oponente -= estado.piecesAtHome(c) * 2;
             for (int j = 0; j < num_pieces; j++) {
                 puntuacion_oponente += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 8;
             }
