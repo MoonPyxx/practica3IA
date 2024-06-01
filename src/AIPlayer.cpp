@@ -21,6 +21,7 @@ bool AIPlayer::move()
     actual->movePiece(c_piece, id_piece, dice);
     return true;
 }
+// CODIGO TUTORIAL
 void AIPlayer::thinkAleatorio(color &c_piece, int &id_piece, int &dice) const
 {
     // El id de mi jugador actual.
@@ -134,7 +135,8 @@ void AIPlayer::thinkMejorOpcion(color &c_piece, int &id_piece, int &dice) const
             id_piece = it.getMovedPieceId();
             dice = it.getMovedDiceValue();
         }
-        else {
+        else
+        {
             int new_power = siguiente_hijo.getPower(this->jugador);
             if (new_power - current_power > max_power)
             {
@@ -146,22 +148,170 @@ void AIPlayer::thinkMejorOpcion(color &c_piece, int &id_piece, int &dice) const
         }
     }
 }
+// FIN CODIGO TUTORIAL
+
+
+// Implementación Poda Alfa-Beta
+double AIPlayer::Poda_AlfaBeta(const Parchis &estado, int jugador, int profundidad, int profundidad_max, color &mejor_color, int &mejor_id, int &mejor_dado, double alpha, double beta, double (*heuristica)(const Parchis &, int)) const
+{
+    if (profundidad == profundidad_max || estado.gameOver())
+    {
+        return heuristica(estado, jugador);
+    }
+    ParchisBros hijos = estado.getChildren();
+    if (estado.getCurrentPlayerId() == jugador)
+    {
+        // Nodo MAX
+        double valor_max = menosinf;
+        for (ParchisBros::Iterator it = hijos.begin(); it != hijos.end(); ++it)
+        {
+            Parchis siguiente_hijo = *it;
+            color c = it.getMovedColor();
+            int id = it.getMovedPieceId();
+            int dado = it.getMovedDiceValue();
+            double valor = Poda_AlfaBeta(siguiente_hijo, jugador, profundidad + 1, profundidad_max, mejor_color, mejor_id, mejor_dado, alpha, beta, heuristica);
+            if (valor > valor_max)
+            {
+                valor_max = valor;
+                if (profundidad == 0)
+                {
+                    mejor_color = c;
+                    mejor_id = id;
+                    mejor_dado = dado;
+                }
+            }
+            alpha = max(alpha, valor);
+            if (beta <= alpha)
+            {
+                break; // poda beta
+            }
+        }
+        return valor_max;
+    }
+    else
+    {
+        // Nodo MIN
+        int oponente = (jugador + 1) % 2;
+        double valor_min = masinf;
+        for (ParchisBros::Iterator it = hijos.begin(); it != hijos.end(); ++it)
+        {
+            Parchis siguiente_hijo = *it;
+            double valor = Poda_AlfaBeta(siguiente_hijo, jugador, profundidad + 1, profundidad_max, mejor_color, mejor_id, mejor_dado, alpha, beta, heuristica);
+            valor_min = min(valor_min, valor);
+            beta = min(beta, valor);
+            if (beta <= alpha)
+            {
+                break; // poda alfa
+            }
+        }
+        return valor_min;
+    }
+}
+
 void AIPlayer::think(color &c_piece, int &id_piece, int &dice) const
 {
+    double valor, alpha = menosinf, beta = masinf;
     switch (id)
     {
     case 0:
-        thinkAleatorio(c_piece, id_piece, dice);
+        valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, ValoracionTest);
         break;
     case 1:
-        thinkAleatorioMasInteligente(c_piece, id_piece, dice);
+        valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, MiValoracion1);
         break;
     case 2:
-        thinkFichaMasAdelantada(c_piece, id_piece, dice);
+       //  valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, MiValoracion2);
         break;
-    case 3:
-        thinkMejorOpcion(c_piece, id_piece, dice);
-        break;
+    }
+}
+double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
+    int ganador = estado.getWinner();
+    int oponente = (jugador + 1) % 2;
+    const int NUM_CASILLAS = 68 + 7; // Número de casillas hasta la meta
+
+    if (ganador == jugador) {
+        return gana;
+    } else if (ganador == oponente) {
+        return pierde;
+    } else {
+        vector<color> my_colors = estado.getPlayerColors(jugador);
+        vector<color> op_colors = estado.getPlayerColors(oponente);
+
+        double puntuacion_jugador = 0.0;
+
+        if (estado.getCurrentPlayerId() == jugador) {
+            if (estado.isEatingMove()) {
+                pair<color, int> piezaComida = estado.eatenPiece();
+                if (piezaComida.first == my_colors[0] || piezaComida.first == my_colors[1]) {
+                    puntuacion_jugador += 5; // Penaliza menos si come una propia
+                } else {
+                    puntuacion_jugador += 100; // Valor más alto si come una del oponente
+                }
+            } else if (estado.isGoalMove()) {
+                puntuacion_jugador += 50; // Más puntos por mover una ficha a la meta
+            } else {
+                auto piezasDestruidas = estado.piecesDestroyedLastMove();
+                if (!piezasDestruidas.empty()) {
+                    for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
+                        if (it->first == my_colors[0] || it->first == my_colors[1]) {
+                            puntuacion_jugador -= 20; // Penaliza si destruye una propia
+                        } else {
+                            puntuacion_jugador += 40; // Aumenta si destruye una del oponente
+                        }
+                    }
+                } else if (estado.getItemAcquired() != -1) {
+                    puntuacion_jugador += 20; // Más puntos por adquirir un objeto
+                } else if (estado.goalBounce()) {
+                    puntuacion_jugador -= 10; // Penaliza más por rebotar en la meta
+                }
+            }
+        }
+
+        for (color c : my_colors) {
+            puntuacion_jugador -= estado.piecesAtHome(c) * 3; // Penaliza más las piezas en casa
+            for (int j = 0; j < num_pieces; j++) {
+                puntuacion_jugador += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 8;
+            }
+        }
+
+        double puntuacion_oponente = 0.0;
+
+        if (estado.getCurrentPlayerId() == oponente) {
+            if (estado.isEatingMove()) {
+                pair<color, int> piezaComida = estado.eatenPiece();
+                if (piezaComida.first == op_colors[0] || piezaComida.first == op_colors[1]) {
+                    puntuacion_oponente += 5;
+                } else {
+                    puntuacion_oponente += 100;
+                }
+            } else if (estado.isGoalMove()) {
+                puntuacion_oponente += 50;
+            } else {
+                auto piezasDestruidas = estado.piecesDestroyedLastMove();
+                if (!piezasDestruidas.empty()) {
+                    for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
+                        if (it->first == op_colors[0] || it->first == op_colors[1]) {
+                            puntuacion_oponente -= 20;
+                        } else {
+                            puntuacion_oponente += 40;
+                        }
+                    }
+                } else if (estado.getItemAcquired() != -1) {
+                    puntuacion_oponente += 20;
+                } else if (estado.goalBounce()) {
+                    puntuacion_oponente -= 10;
+                }
+            }
+        }
+
+        for (color c : op_colors) {
+            puntuacion_oponente -= estado.piecesAtHome(c) * 3;
+            for (int j = 0; j < num_pieces; j++) {
+                puntuacion_oponente += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 8;
+            }
+        }
+
+        return puntuacion_jugador - puntuacion_oponente;
     }
 }
 
@@ -233,30 +383,3 @@ double AIPlayer::ValoracionTest(const Parchis &estado, int jugador)
         return puntuacion_jugador - puntuacion_oponente;
     }
 }
-
-/*
-// El siguiente código se proporciona como sugerencia para iniciar la implementación del agente.
-
-double valor; // Almacena el valor con el que se etiqueta el estado tras el proceso de busqueda.
-double alpha = menosinf, beta = masinf; // Cotas iniciales de la poda AlfaBeta
-// Llamada a la función para la poda (los parámetros son solo una sugerencia, se pueden modificar).
-valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, ValoracionTest);
-cout << "Valor MiniMax: " << valor << "  Accion: " << str(c_piece) << " " << id_piece << " " << dice << endl;
-
-// ----------------------------------------------------------------- //
-
-// Si quiero poder manejar varias heurísticas, puedo usar la variable id del agente para usar una u otra.
-switch(id){
-    case 0:
-        valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, ValoracionTest);
-        break;
-    case 1:
-        valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, MiValoracion1);
-        break;
-    case 2:
-        valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, MiValoracion2);
-        break;
-}
-cout << "Valor MiniMax: " << valor << "  Accion: " << str(c_piece) << " " << id_piece << " " << dice << endl;
-
-*/
