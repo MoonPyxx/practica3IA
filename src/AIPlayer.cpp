@@ -219,9 +219,6 @@ void AIPlayer::think(color &c_piece, int &id_piece, int &dice) const
     case 1:
         valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, MiValoracion1);
         break;
-    case 2:
-       //  valor = Poda_AlfaBeta(*actual, jugador, 0, PROFUNDIDAD_ALFABETA, c_piece, id_piece, dice, alpha, beta, MiValoracion2);
-        break;
     }
 }
 
@@ -246,26 +243,26 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
             if (estado.isEatingMove()) { // si come
                 pair<color, int> piezaComida = estado.eatenPiece();
                 if (piezaComida.first == my_colors[0] || piezaComida.first == my_colors[1]) {
-                    puntuacion_jugador += 1; // Penaliza menos si come una propia
+                    puntuacion_jugador -= 5; // Penaliza menos si come una propia
                 } else {
                     puntuacion_jugador += 100; // Valor más alto si come una del oponente
                 }
             } else if (estado.isGoalMove()) { // si ha metido ficha
-                puntuacion_jugador += 50; // Más puntos por mover una ficha a la meta
+                puntuacion_jugador += 35; // Más puntos por mover una ficha a la meta
             } else {
                 auto piezasDestruidas = estado.piecesDestroyedLastMove();
                 if (!piezasDestruidas.empty()) { // si ha destruido piezas del rival suma, si suyas resta
                     for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
                         if (it->first == my_colors[0] || it->first == my_colors[1]) {
-                            puntuacion_jugador -= 40; // Penaliza si destruye una propia
+                            puntuacion_jugador -= 35; // Penaliza si destruye una propia
                         } else {
-                            puntuacion_jugador += 40; // Aumenta si destruye una del oponente
+                            puntuacion_jugador += 35; // Aumenta si destruye una del oponente
                         }
                     }
                 } else if (estado.getItemAcquired() != -1) {
-                    puntuacion_jugador += 20; // Más puntos por adquirir un objeto
+                    puntuacion_jugador += 15; // Más puntos por adquirir un objeto
                 } else if (estado.goalBounce()) {
-                    puntuacion_jugador -= 1; // Penaliza más por rebotar en la meta
+                    puntuacion_jugador -= 2; // Penaliza más por rebotar en la meta
                 }
             }
         }
@@ -273,7 +270,7 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
         for (color c : my_colors) {
             puntuacion_jugador -= estado.piecesAtHome(c) * 2; // Penaliza más las piezas en casa
             for (int j = 0; j < num_pieces; j++) {
-                puntuacion_jugador += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 8;
+                puntuacion_jugador += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 6;
             }
         }
 
@@ -283,26 +280,26 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
             if (estado.isEatingMove()) {
                 pair<color, int> piezaComida = estado.eatenPiece();
                 if (piezaComida.first == op_colors[0] || piezaComida.first == op_colors[1]) {
-                    puntuacion_oponente += 1;
+                    puntuacion_oponente -= 5;
                 } else {
                     puntuacion_oponente += 100;
                 }
             } else if (estado.isGoalMove()) {
-                puntuacion_oponente += 50;
+                puntuacion_oponente += 35;
             } else {
                 auto piezasDestruidas = estado.piecesDestroyedLastMove();
                 if (!piezasDestruidas.empty()) {
                     for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
                         if (it->first == op_colors[0] || it->first == op_colors[1]) {
-                            puntuacion_oponente -= 40;
+                            puntuacion_oponente -= 35;
                         } else {
-                            puntuacion_oponente += 40;
+                            puntuacion_oponente += 35;
                         }
                     }
                 } else if (estado.getItemAcquired() != -1) {
-                    puntuacion_oponente += 20;
+                    puntuacion_oponente += 15;
                 } else if (estado.goalBounce()) {
-                    puntuacion_oponente -= 1;
+                    puntuacion_oponente -= 2;
                 }
             }
         }
@@ -310,7 +307,7 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
         for (color c : op_colors) {
             puntuacion_oponente -= estado.piecesAtHome(c) * 2;
             for (int j = 0; j < num_pieces; j++) {
-                puntuacion_oponente += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 8;
+                puntuacion_oponente += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 6;
             }
         }
 
