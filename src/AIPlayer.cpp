@@ -231,189 +231,285 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador) {
     int oponente = (jugador + 1) % 2;
     const int NUM_CASILLAS = 68 + 7; // Número de casillas hasta la meta
 
-    if (ganador == jugador) {
-        return gana;
-    } else if (ganador == oponente) {
-        return pierde;
-    } else {
-        vector<color> my_colors = estado.getPlayerColors(jugador);
-        vector<color> op_colors = estado.getPlayerColors(oponente);
-
-        double puntuacion_jugador = 0.0;
-
-        if (estado.getCurrentPlayerId() == jugador) {
-            if (estado.isEatingMove()) { // si come
-                pair<color, int> piezaComida = estado.eatenPiece();
-                if (piezaComida.first == my_colors[0] || piezaComida.first == my_colors[1]) {
-                    puntuacion_jugador -= 5; // Penaliza menos si come una propia
-                } else {
-                    puntuacion_jugador += 100; // Valor más alto si come una del oponente
-                }
-            } else if (estado.isGoalMove()) { // si ha metido ficha
-                puntuacion_jugador += 35; // Más puntos por mover una ficha a la meta
-            } else {
-                auto piezasDestruidas = estado.piecesDestroyedLastMove();
-                if (!piezasDestruidas.empty()) { // si ha destruido piezas del rival suma, si suyas resta
-                    for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
-                        if (it->first == my_colors[0] || it->first == my_colors[1]) {
-                            puntuacion_jugador -= 35; // Penaliza si destruye una propia
-                        } else {
-                            puntuacion_jugador += 35; // Aumenta si destruye una del oponente
-                        }
-                    }
-                } else if (estado.getItemAcquired() != -1) {
-                    puntuacion_jugador += 15; // Más puntos por adquirir un objeto
-                } else if (estado.goalBounce()) {
-                    puntuacion_jugador -= 2; // Penaliza más por rebotar en la meta
-                }
-            }
-        }
-
-        for (color c : my_colors) {
-            puntuacion_jugador -= estado.piecesAtHome(c) * 2; // Penaliza más las piezas en casa
-            for (int j = 0; j < num_pieces; j++) {
-                puntuacion_jugador += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 6;
-            }
-        }
-
-        double puntuacion_oponente = 0.0;
-
-        if (estado.getCurrentPlayerId() == oponente) {
-            if (estado.isEatingMove()) {
-                pair<color, int> piezaComida = estado.eatenPiece();
-                if (piezaComida.first == op_colors[0] || piezaComida.first == op_colors[1]) {
-                    puntuacion_oponente -= 5;
-                } else {
-                    puntuacion_oponente += 100;
-                }
-            } else if (estado.isGoalMove()) {
-                puntuacion_oponente += 35;
-            } else {
-                auto piezasDestruidas = estado.piecesDestroyedLastMove();
-                if (!piezasDestruidas.empty()) {
-                    for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
-                        if (it->first == op_colors[0] || it->first == op_colors[1]) {
-                            puntuacion_oponente -= 35;
-                        } else {
-                            puntuacion_oponente += 35;
-                        }
-                    }
-                } else if (estado.getItemAcquired() != -1) {
-                    puntuacion_oponente += 15;
-                } else if (estado.goalBounce()) {
-                    puntuacion_oponente -= 2;
-                }
-            }
-        }
-
-        for (color c : op_colors) {
-            puntuacion_oponente -= estado.piecesAtHome(c) * 2;
-            for (int j = 0; j < num_pieces; j++) {
-                puntuacion_oponente += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * 6;
-            }
-        }
-
-        return puntuacion_jugador - puntuacion_oponente;
-    }
-}
-
-
-double AIPlayer::MiValoracion2(const Parchis &estado, int jugador){
-     int ganador = estado.getWinner();
-    int oponente = (jugador + 1) % 2;
-    const int NUM_CASILLAS = 68 + 7; // Número de casillas hasta la meta
-    const double BARRIER_BONUS = 20.0;
-    const double MEGA_BARRIER_BONUS = 40.0;
-    const double SAFE_BONUS = 5.0;
-    const double EAT_BONUS = 100.0;
-    const double GOAL_BONUS = 50.0;
-    const double PIECE_HOME_PENALTY = -5.0;
-    const double PIECE_DESTROYED_PENALTY = -30.0;
+    // Puntuaciones para diferentes situaciones
+    const double BONUS_BARRERA = 20.0;
+    const double BONUS_MEGA_BARRERA = 40.0;
+    const double BONUS_SEGURO = 5.0;
+    const double BONUS_COMER = 100.0;
+    const double BONUS_META = 50.0;
+    const double PENALIZACION_CASA = -5.0;
+    const double PENALIZACION_DESTRUIDA = -30.0;
+    const double PENALIZACION_REBOTE = -10.0;
+    const double BONUS_OBJETO = 15.0;
+    const double BONUS_COMER_PROPIO = 50.0; // Nuevo bonus por comer una ficha propia
 
     if (ganador == jugador) {
         return gana;
     } else if (ganador == oponente) {
         return pierde;
     } else {
-        vector<color> my_colors = estado.getPlayerColors(jugador);
-        vector<color> op_colors = estado.getPlayerColors(oponente);
+        vector<color> mis_colores = estado.getPlayerColors(jugador);
+        vector<color> colores_oponente = estado.getPlayerColors(oponente);
 
         double puntuacion_jugador = 0.0;
-        double energy = estado.getPower(jugador);
+        double energia = estado.getPower(jugador);
 
-        // Valoración del jugador actual
-        for (color c : my_colors) {
-            puntuacion_jugador -= estado.piecesAtHome(c) * PIECE_HOME_PENALTY; // Penaliza las piezas en casa
-
-            for (int j = 0; j < num_pieces; j++) {
-                puntuacion_jugador += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * GOAL_BONUS;
-
-                Box current_box = estado.getBoard().getPiece(c, j).get_box();
-                if (estado.isWall(current_box) == c) {
-                    puntuacion_jugador += BARRIER_BONUS; // Bonificación por barrera propia
-                }
-                if (estado.isMegaWall(current_box) == c) {
-                    puntuacion_jugador += MEGA_BARRIER_BONUS; // Bonificación por megabarrera propia
-                }
-            }
-        }
-
-        // Valoración del oponente
-        double puntuacion_oponente = 0.0;
-        for (color c : op_colors) {
-            puntuacion_oponente -= estado.piecesAtHome(c) * PIECE_HOME_PENALTY;
-
-            for (int j = 0; j < num_pieces; j++) {
-                puntuacion_oponente += NUM_CASILLAS - estado.distanceToGoal(c, j) + estado.piecesAtGoal(c) * GOAL_BONUS;
-
-                Box current_box = estado.getBoard().getPiece(c, j).get_box();
-                if (estado.isWall(current_box) == c) {
-                    puntuacion_oponente -= BARRIER_BONUS; // Penalización por barrera del oponente
-                }
-                if (estado.isMegaWall(current_box) == c) {
-                    puntuacion_oponente -= MEGA_BARRIER_BONUS; // Penalización por megabarrera del oponente
-                }
-            }
-        }
-
-        // Efectos del dado especial
+        // Evaluación del movimiento reciente del jugador
         if (estado.getCurrentPlayerId() == jugador) {
-            if (estado.isEatingMove()) {
+            if (estado.isEatingMove()) { // Si come ficha
                 pair<color, int> piezaComida = estado.eatenPiece();
-                if (piezaComida.first != my_colors[0] && piezaComida.first != my_colors[1]) {
-                    puntuacion_jugador += EAT_BONUS; // Bonificación por comer una ficha del oponente
+                if (piezaComida.first == mis_colores[0] || piezaComida.first == mis_colores[1]) {
+                    // Solo comer una ficha propia si está cerca de la meta y si es beneficioso
+                    int dist_meta = estado.distanceToGoal(piezaComida.first, piezaComida.second);
+                    if (dist_meta < 10 && estado.distanceToGoal(piezaComida.first, piezaComida.second) < estado.distanceToGoal(piezaComida.first, piezaComida.second)) {
+                        puntuacion_jugador += BONUS_COMER_PROPIO; // Bonificación por comer una propia cerca de la meta
+                    } else {
+                        puntuacion_jugador -= 5; // Penalización básica por comer una propia
+                    }
                 } else {
-                    puntuacion_jugador += PIECE_DESTROYED_PENALTY; // Penalización por comer una ficha propia
+                    puntuacion_jugador += BONUS_COMER; // Valor alto si come una del oponente
                 }
-            } else if (estado.isGoalMove()) {
-                puntuacion_jugador += GOAL_BONUS; // Bonificación por llegar a la meta
+            } else if (estado.isGoalMove()) { // Si ha metido ficha
+                puntuacion_jugador += BONUS_META; // Más puntos por mover una ficha a la meta
+            } else {
+                auto piezasDestruidas = estado.piecesDestroyedLastMove();
+                if (!piezasDestruidas.empty()) { // Si ha destruido piezas del rival suma, si suyas resta
+                    for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
+                        if (it->first == mis_colores[0] || it->first == mis_colores[1]) {
+                            puntuacion_jugador += PENALIZACION_DESTRUIDA; // Penaliza si destruye una propia
+                        } else {
+                            puntuacion_jugador -= PENALIZACION_DESTRUIDA; // Aumenta si destruye una del oponente
+                        }
+                    }
+                } else if (estado.getItemAcquired() != -1) {
+                    puntuacion_jugador += BONUS_OBJETO; // Más puntos por adquirir un objeto
+                } else if (estado.goalBounce()) {
+                    puntuacion_jugador += PENALIZACION_REBOTE; // Penaliza más por rebotar en la meta
+                }
+            }
+        }
+
+        // Evaluación del estado global del jugador
+        for (color c : mis_colores) {
+            puntuacion_jugador += estado.piecesAtHome(c) * PENALIZACION_CASA; // Penaliza las piezas en casa
+            puntuacion_jugador += estado.piecesAtGoal(c) * BONUS_META; // Premia las fichas en la meta
+
+            for (int j = 0; j < num_pieces; j++) {
+                int dist_meta = estado.distanceToGoal(c, j);
+                puntuacion_jugador += (NUM_CASILLAS - dist_meta); // Premia la cercanía a la meta
+
+                if (estado.isSafePiece(c, j)) {
+                    puntuacion_jugador += BONUS_SEGURO; // Premia estar en una casilla segura
+                }
+
+                Box ficha_box = estado.getBoard().getPiece(c, j).get_box();
+                if (estado.isWall(ficha_box) == c) {
+                    puntuacion_jugador += BONUS_BARRERA; // Bonificación por barrera propia
+                }
+
+                if (estado.isMegaWall(ficha_box) == c) {
+                    puntuacion_jugador += BONUS_MEGA_BARRERA; // Bonificación por megabarrera propia
+                }
+            }
+        }
+
+        // Evaluación del estado global del oponente
+        double puntuacion_oponente = 0.0;
+        for (color c : colores_oponente) {
+            puntuacion_oponente += estado.piecesAtHome(c) * PENALIZACION_CASA;
+            puntuacion_oponente += estado.piecesAtGoal(c) * BONUS_META;
+
+            for (int j = 0; j < num_pieces; j++) {
+                int dist_meta = estado.distanceToGoal(c, j);
+                puntuacion_oponente += (NUM_CASILLAS - dist_meta);
+
+                if (estado.isSafePiece(c, j)) {
+                    puntuacion_oponente += BONUS_SEGURO;
+                }
+
+                Box ficha_box = estado.getBoard().getPiece(c, j).get_box();
+                if (estado.isWall(ficha_box) == c) {
+                    puntuacion_oponente += BONUS_BARRERA;
+                }
+
+                if (estado.isMegaWall(ficha_box) == c) {
+                    puntuacion_oponente += BONUS_MEGA_BARRERA;
+                }
             }
         }
 
         // Aplicación de las acciones del dado especial
-        if (energy >= 50 && energy < 60 || energy >= 70 && energy < 75) {
-            puntuacion_jugador += EAT_BONUS; // Bonificación por concha roja
-        } else if (energy >= 60 && energy < 65) {
-            puntuacion_jugador += PIECE_DESTROYED_PENALTY; // Penalización por BOOM
-        } else if (energy >= 65 && energy < 70) {
-            puntuacion_jugador += GOAL_BONUS; // Bonificación por movimiento ultra rápido
-        } else if (energy >= 75 && energy < 80) {
-            puntuacion_jugador += GOAL_BONUS * 2; // Bonificación por movimiento bala
-        } else if (energy >= 80 && energy < 85) {
-            puntuacion_jugador += PIECE_DESTROYED_PENALTY; // Penalización por CATAPUM
-        } else if (energy >= 85 && energy < 90) {
-            puntuacion_jugador += EAT_BONUS; // Bonificación por concha azul
-        } else if (energy >= 90 && energy < 95) {
-            puntuacion_jugador += PIECE_DESTROYED_PENALTY * 2; // Penalización por BOOMBOOM
-        } else if (energy >= 95 && energy < 100) {
-            puntuacion_jugador += SAFE_BONUS * 5; // Bonificación por movimiento estrella
-        } else if (energy == 100) {
-            puntuacion_jugador += PIECE_DESTROYED_PENALTY * 3; // Penalización por CATAPUMCHIMPUM
+        if (energia < 50) {
+            puntuacion_jugador += (7 + energia / 7); // Movimiento rápido
+        } else if (energia >= 50 && energia < 60) {
+            puntuacion_jugador += BONUS_COMER; // Concha roja
+        } else if (energia >= 60 && energia < 65) {
+            puntuacion_jugador -= PENALIZACION_DESTRUIDA; // BOOM
+        } else if (energia >= 65 && energia < 70) {
+            puntuacion_jugador += 25; // Movimiento ultra rápido
+        } else if (energia >= 70 && energia < 75) {
+            puntuacion_jugador += BONUS_COMER; // Concha roja
+        } else if (energia >= 75 && energia < 80) {
+            puntuacion_jugador += 40; // Movimiento bala
+        } else if (energia >= 80 && energia < 85) {
+            puntuacion_jugador -= PENALIZACION_DESTRUIDA; // CATAPUM
+        } else if (energia >= 85 && energia < 90) {
+            puntuacion_jugador += BONUS_COMER; // Concha azul
+        } else if (energia >= 90 && energia < 95) {
+            puntuacion_jugador -= 2 * PENALIZACION_DESTRUIDA; // BOOMBOOM
+        } else if (energia >= 95 && energia < 100) {
+            puntuacion_jugador += BONUS_SEGURO * 5; // Movimiento estrella
+        } else if (energia == 100) {
+            puntuacion_jugador -= 3 * PENALIZACION_DESTRUIDA; // CATAPUMCHIMPUM
         }
 
         return puntuacion_jugador - puntuacion_oponente;
     }
 }
+
+
+
+double AIPlayer::MiValoracion2(const Parchis &estado, int jugador) {
+    int ganador = estado.getWinner();
+    int oponente = (jugador + 1) % 2;
+    const int NUM_CASILLAS = 68 + 7; // Número de casillas hasta la meta
+
+    // Puntuaciones para diferentes situaciones
+    const double BONUS_BARRERA = 20.0;
+    const double BONUS_MEGA_BARRERA = 40.0;
+    const double BONUS_SEGURO = 5.0;
+    const double BONUS_COMER = 100.0;
+    const double BONUS_META = 50.0;
+    const double PENALIZACION_CASA = -5.0;
+    const double PENALIZACION_DESTRUIDA = -30.0;
+    const double PENALIZACION_REBOTE = -10.0;
+    const double BONUS_OBJETO = 15.0;
+    const double BONUS_COMER_PROPIO = 50.0; // Nuevo bonus por comer una ficha propia
+
+    if (ganador == jugador) {
+        return gana;
+    } else if (ganador == oponente) {
+        return pierde;
+    } else {
+        vector<color> mis_colores = estado.getPlayerColors(jugador);
+        vector<color> colores_oponente = estado.getPlayerColors(oponente);
+
+        double puntuacion_jugador = 0.0;
+        double energia = estado.getPower(jugador);
+
+        // Evaluación del movimiento reciente del jugador
+        if (estado.getCurrentPlayerId() == jugador) {
+            if (estado.isEatingMove()) { // Si come ficha
+                pair<color, int> piezaComida = estado.eatenPiece();
+                if (piezaComida.first == mis_colores[0] || piezaComida.first == mis_colores[1]) {
+                    // Penaliza menos si come una propia, pero premia si está cerca de la meta
+                    int dist_meta = estado.distanceToGoal(piezaComida.first, piezaComida.second);
+                    if (dist_meta < 10) {
+                        puntuacion_jugador += BONUS_COMER_PROPIO; // Bonificación por comer una propia cerca de la meta
+                    } else {
+                        puntuacion_jugador -= 5; // Penalización básica por comer una propia
+                    }
+                } else {
+                    puntuacion_jugador += BONUS_COMER; // Valor alto si come una del oponente
+                }
+            } else if (estado.isGoalMove()) { // Si ha metido ficha
+                puntuacion_jugador += BONUS_META; // Más puntos por mover una ficha a la meta
+            } else {
+                auto piezasDestruidas = estado.piecesDestroyedLastMove();
+                if (!piezasDestruidas.empty()) { // Si ha destruido piezas del rival suma, si suyas resta
+                    for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it) {
+                        if (it->first == mis_colores[0] || it->first == mis_colores[1]) {
+                            puntuacion_jugador -= PENALIZACION_DESTRUIDA; // Penaliza si destruye una propia
+                        } else {
+                            puntuacion_jugador += PENALIZACION_DESTRUIDA; // Aumenta si destruye una del oponente
+                        }
+                    }
+                } else if (estado.getItemAcquired() != -1) {
+                    puntuacion_jugador += BONUS_OBJETO; // Más puntos por adquirir un objeto
+                } else if (estado.goalBounce()) {
+                    puntuacion_jugador += PENALIZACION_REBOTE; // Penaliza más por rebotar en la meta
+                }
+            }
+        }
+
+        // Evaluación del estado global del jugador
+        for (color c : mis_colores) {
+            puntuacion_jugador += estado.piecesAtHome(c) * PENALIZACION_CASA; // Penaliza las piezas en casa
+            puntuacion_jugador += estado.piecesAtGoal(c) * BONUS_META; // Premia las fichas en la meta
+
+            for (int j = 0; j < num_pieces; j++) {
+                int dist_meta = estado.distanceToGoal(c, j);
+                puntuacion_jugador += (NUM_CASILLAS - dist_meta); // Premia la cercanía a la meta
+
+                if (estado.isSafePiece(c, j)) {
+                    puntuacion_jugador += BONUS_SEGURO; // Premia estar en una casilla segura
+                }
+
+                Box ficha_box = estado.getBoard().getPiece(c, j).get_box();
+                if (estado.isWall(ficha_box) == c) {
+                    puntuacion_jugador += BONUS_BARRERA; // Bonificación por barrera propia
+                }
+
+                if (estado.isMegaWall(ficha_box) == c) {
+                    puntuacion_jugador += BONUS_MEGA_BARRERA; // Bonificación por megabarrera propia
+                }
+            }
+        }
+
+        // Evaluación del estado global del oponente
+        double puntuacion_oponente = 0.0;
+        for (color c : colores_oponente) {
+            puntuacion_oponente += estado.piecesAtHome(c) * PENALIZACION_CASA;
+            puntuacion_oponente += estado.piecesAtGoal(c) * BONUS_META;
+
+            for (int j = 0; j < num_pieces; j++) {
+                int dist_meta = estado.distanceToGoal(c, j);
+                puntuacion_oponente += (NUM_CASILLAS - dist_meta);
+
+                if (estado.isSafePiece(c, j)) {
+                    puntuacion_oponente += BONUS_SEGURO;
+                }
+
+                Box ficha_box = estado.getBoard().getPiece(c, j).get_box();
+                if (estado.isWall(ficha_box) == c) {
+                    puntuacion_oponente += BONUS_BARRERA;
+                }
+
+                if (estado.isMegaWall(ficha_box) == c) {
+                    puntuacion_oponente += BONUS_MEGA_BARRERA;
+                }
+            }
+        }
+
+        // Aplicación de las acciones del dado especial
+        if (energia < 50) {
+            puntuacion_jugador += (7 + energia / 7); // Movimiento rápido
+        } else if (energia >= 50 && energia < 60) {
+            puntuacion_jugador += BONUS_COMER; // Concha roja
+        } else if (energia >= 60 && energia < 65) {
+            puntuacion_jugador -= PENALIZACION_DESTRUIDA; // BOOM
+        } else if (energia >= 65 && energia < 70) {
+            puntuacion_jugador += 25; // Movimiento ultra rápido
+        } else if (energia >= 70 && energia < 75) {
+            puntuacion_jugador += BONUS_COMER; // Concha roja
+        } else if (energia >= 75 && energia < 80) {
+            puntuacion_jugador += 40; // Movimiento bala
+        } else if (energia >= 80 && energia < 85) {
+            puntuacion_jugador -= PENALIZACION_DESTRUIDA; // CATAPUM
+        } else if (energia >= 85 && energia < 90) {
+            puntuacion_jugador += BONUS_COMER; // Concha azul
+        } else if (energia >= 90 && energia < 95) {
+            puntuacion_jugador -= 2 * PENALIZACION_DESTRUIDA; // BOOMBOOM
+        } else if (energia >= 95 && energia < 100) {
+            puntuacion_jugador += BONUS_SEGURO * 5; // Movimiento estrella
+        } else if (energia == 100) {
+            puntuacion_jugador -= 3 * PENALIZACION_DESTRUIDA; // CATAPUMCHIMPUM
+        }
+
+        return puntuacion_jugador - puntuacion_oponente;
+    }
+}
+
 
 double AIPlayer::ValoracionTest(const Parchis &estado, int jugador)
 {
