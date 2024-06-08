@@ -153,59 +153,73 @@ void AIPlayer::thinkMejorOpcion(color &c_piece, int &id_piece, int &dice) const
 // Implementación Poda Alfa-Beta
 double AIPlayer::Poda_AlfaBeta(const Parchis &estado, int jugador, int profundidad, int profundidad_max, color &mejor_color, int &mejor_id, int &mejor_dado, double alpha, double beta, double (*heuristica)(const Parchis &, int)) const
 {
-    if (profundidad == profundidad_max || estado.gameOver())
-    {
-        return heuristica(estado, jugador);
+    // Caso base: si alcanzamos la profundidad máxima o el juego ha terminado
+    if (profundidad == profundidad_max || estado.gameOver()) {
+        return heuristica(estado, jugador); // Evaluamos el estado del juego con la heurística
     }
-    ParchisBros hijos = estado.getChildren();
-    if (estado.getCurrentPlayerId() == jugador)
-    {
-        // Nodo MAX
-        double valor_max = menosinf;
-        for (ParchisBros::Iterator it = hijos.begin(); it != hijos.end(); ++it)
-        {
+
+    ParchisBros hijos = estado.getChildren(); // Generamos los hijos del estado actual utilizando ParchisBros
+
+    // Si es el turno del jugador actual (nodo MAX)
+    if (estado.getCurrentPlayerId() == jugador) {
+        double valor_max = menosinf; // Inicializamos el valor máximo a -infinito
+
+        // Iteramos sobre todos los movimientos posibles con el iterador el ParchisBros
+        for (ParchisBros::Iterator it = hijos.begin(); it != hijos.end(); ++it) {
             Parchis siguiente_hijo = *it;
             color c = it.getMovedColor();
             int id = it.getMovedPieceId();
             int dado = it.getMovedDiceValue();
+
+            // Llamada recursiva a Poda_AlfaBeta con el siguiente movimiento
             double valor = Poda_AlfaBeta(siguiente_hijo, jugador, profundidad + 1, profundidad_max, mejor_color, mejor_id, mejor_dado, alpha, beta, heuristica);
-            if (valor > valor_max)
-            {
+
+            // Actualizamos el valor máximo si encontramos un valor mayor
+            if (valor > valor_max) {
                 valor_max = valor;
-                if (profundidad == 0)
-                {
+                if (profundidad == 0) { // Solo actualizamos el mejor movimiento en la raíz
                     mejor_color = c;
                     mejor_id = id;
                     mejor_dado = dado;
                 }
             }
+            // Actualizamos alpha
             alpha = max(alpha, valor);
-            if (beta <= alpha)
-            {
-                break; // poda beta
+
+            // Poda beta (si la beta es menor que alpha, podamos ya que no nos sirve seguir explorando)
+            if (beta <= alpha) {
+                break;
             }
         }
         return valor_max;
     }
-    else
-    {
-        // Nodo MIN
+    else { // El código es prácticamente igual pero con min y max intercambiados y actualizamos beta en vez de alpha
+    // Turno del oponente (nodo MIN)
         int oponente = (jugador + 1) % 2;
-        double valor_min = masinf;
-        for (ParchisBros::Iterator it = hijos.begin(); it != hijos.end(); ++it)
-        {
+        double valor_min = masinf; // Inicializamos el valor mínimo a +infinito
+
+        // Iteramos sobre todos los movimientos posibles con el iterador de ParchisBros
+        for (ParchisBros::Iterator it = hijos.begin(); it != hijos.end(); ++it) {
             Parchis siguiente_hijo = *it;
+
+            // Llamada recursiva a Poda_AlfaBeta con el siguiente movimiento
             double valor = Poda_AlfaBeta(siguiente_hijo, jugador, profundidad + 1, profundidad_max, mejor_color, mejor_id, mejor_dado, alpha, beta, heuristica);
+
+            // Actualizamos el valor mínimo si encontramos un valor menor
             valor_min = min(valor_min, valor);
+
+            // Actualizamos beta
             beta = min(beta, valor);
-            if (beta <= alpha)
-            {
-                break; // poda alfa
+
+            // Poda alfa (si la beta es menor que alpha, podamos ya que no nos sirve seguir explorando)
+            if (beta <= alpha) {
+                break;
             }
         }
         return valor_min;
     }
 }
+
 
 void AIPlayer::think(color &c_piece, int &id_piece, int &dice) const
 {
@@ -225,10 +239,11 @@ void AIPlayer::think(color &c_piece, int &id_piece, int &dice) const
 
 double AIPlayer::MiValoracion1(const Parchis &estado, int jugador)
 {
-    int ganador = estado.getWinner();
-    int oponente = (jugador + 1) % 2;
-    const int NUM_CASILLAS = 68 + 7;
+    int ganador = estado.getWinner(); 
+    int oponente = (jugador + 1) % 2; 
+    const int NUM_CASILLAS = 68 + 7; // Número total de casillas hasta la meta
 
+    // Definimos las constantes de bonificación y penalización para la heurística
     const double BONUS_BARRERA = 20.0;
     const double BONUS_MEGA_BARRERA = 40.0;
     const double BONUS_SEGURO = 5.0;
@@ -240,50 +255,52 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador)
     const double BONUS_OBJETO = 15.0;
     const double BONUS_COMER_PROPIO = 50.0;
 
+    // Si hay un ganador, devolvemos la puntuación correspondiente
     if (ganador == jugador) return gana;
     else if (ganador == oponente) return pierde;
     else
     {
-        vector<color> mis_colores = estado.getPlayerColors(jugador);
-        vector<color> colores_oponente = estado.getPlayerColors(oponente);
+        vector<color> mis_colores = estado.getPlayerColors(jugador); 
+        vector<color> colores_oponente = estado.getPlayerColors(oponente); 
 
-        double puntuacion_jugador = 0.0;
-        double energia = estado.getPower(jugador);
+        double puntuacion_jugador = 0.0; // Inicializamos la puntuación del jugador a 0
+        double energia = estado.getPower(jugador); // Obtenemos la energía del jugador para poder tener en cuenta el uso del dado especial
 
+        // Movimiento del jugador
         if (estado.getCurrentPlayerId() == jugador)
         {
             if (estado.isEatingMove())
-            { // Si come ficha
+            { // Si el jugador come una ficha
                 pair<color, int> piezaComida = estado.eatenPiece();
                 if (piezaComida.first == mis_colores[0] || piezaComida.first == mis_colores[1])
                 {
-                    // Solo comer una ficha propia si está cerca de la meta y si es beneficioso
+                    // El jugador solo come una ficha propia si está cerca de su meta y si es beneficioso
                     int dist_meta = estado.distanceToGoal(piezaComida.first, piezaComida.second);
-                    if (dist_meta < 10 && estado.distanceToGoal(piezaComida.first, piezaComida.second) < estado.distanceToGoal(piezaComida.first, piezaComida.second))
+                    if (dist_meta < 10)
                     {
-                        puntuacion_jugador += BONUS_COMER_PROPIO; // Bonificación por comer una propia cerca de la meta
+                        puntuacion_jugador += BONUS_COMER_PROPIO; // Si está cerca de la meta, bonifica el comer una propia (puede ser beneficioso estratégicamente)
                     }
-                    else puntuacion_jugador -= 5; // Penalización básica por comer una propia
+                    else puntuacion_jugador -= 5; //  Si no lo está, penaliza.
                 }
-                else puntuacion_jugador += BONUS_COMER; // Valor alto si come una del oponente
+                else puntuacion_jugador += BONUS_COMER; // Si se come una del oponente, siempre es beneficioso
             }
-            // Si ha metido ficha
+            // Si el jugador ha metido ficha en la meta
             else if (estado.isGoalMove()){ 
-                puntuacion_jugador += BONUS_META; // Más puntos por mover una ficha a la meta
+                puntuacion_jugador += BONUS_META; 
             }
             else
             {
-                auto piezasDestruidas = estado.piecesDestroyedLastMove();
+                auto piezasDestruidas = estado.piecesDestroyedLastMove(); 
                 if (!piezasDestruidas.empty())
-                { // Si ha destruido piezas del rival suma, si suyas resta
+                { // Si ha destruido piezas del rival suma, si son suyas resta
                     for (auto it = piezasDestruidas.begin(); it != piezasDestruidas.end(); ++it)
                     {
-                        if (it->first == mis_colores[0] || it->first == mis_colores[1]) puntuacion_jugador += PENALIZACION_DESTRUIDA; // Penaliza si destruye una propia
-                        else puntuacion_jugador -= PENALIZACION_DESTRUIDA; // Aumenta si destruye una del oponente
+                        if (it->first == mis_colores[0] || it->first == mis_colores[1]) puntuacion_jugador += PENALIZACION_DESTRUIDA; 
+                        else puntuacion_jugador -= PENALIZACION_DESTRUIDA; 
                     }
                 }
-                else if (estado.getItemAcquired() != -1) puntuacion_jugador += BONUS_OBJETO; // Más puntos por adquirir un objeto
-                else if (estado.goalBounce()) puntuacion_jugador += PENALIZACION_REBOTE; // Penaliza más por rebotar en la meta
+                else if (estado.getItemAcquired() != -1) puntuacion_jugador += BONUS_OBJETO; // Más puntos por adquirir un objeto del dado especial
+                else if (estado.goalBounce()) puntuacion_jugador += PENALIZACION_REBOTE; // Penaliza al rebotar en la meta
             }
         }
 
@@ -295,7 +312,7 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador)
 
             for (int j = 0; j < num_pieces; j++)
             {
-                int dist_meta = estado.distanceToGoal(c, j);
+                int dist_meta = estado.distanceToGoal(c, j); 
                 puntuacion_jugador += (NUM_CASILLAS - dist_meta); // Premia la cercanía a la meta
                 if (estado.isSafePiece(c, j)) puntuacion_jugador += BONUS_SEGURO; // Premia estar en una casilla segura      
                 Box ficha_box = estado.getBoard().getPiece(c, j).get_box();
@@ -304,7 +321,7 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador)
             }
         }
 
-        // Evaluación del estado global del oponente
+        // Evaluación del estado global del oponente, lo mismo pero para el oponente
         double puntuacion_oponente = 0.0;
         for (color c : colores_oponente)
         {
@@ -321,9 +338,10 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador)
                 if (estado.isMegaWall(ficha_box) == c) { puntuacion_oponente += BONUS_MEGA_BARRERA; }
             }
         }
-        // dado especial para el jugador
+        
+        // Evaluación del dado especial para el jugador
         if (energia < 50) { puntuacion_jugador += (7 + energia / 7); } 
-        else if (energia >= 50 && energia < 60 || energia >= 70 && energia < 75 || energia >= 85 && energia < 90) { puntuacion_jugador += BONUS_COMER; } 
+        else if ((energia >= 50 && energia < 60) || (energia >= 70 && energia < 75) || (energia >= 85 && energia < 90)) { puntuacion_jugador += BONUS_COMER; } 
         else if (energia >= 60 && energia < 65) { puntuacion_jugador -= PENALIZACION_DESTRUIDA; } 
         else if (energia >= 65 && energia < 70) { puntuacion_jugador += 25; } 
         else if (energia >= 75 && energia < 80) { puntuacion_jugador += 40; } 
@@ -332,9 +350,10 @@ double AIPlayer::MiValoracion1(const Parchis &estado, int jugador)
         else if (energia >= 95 && energia < 100) { puntuacion_jugador += BONUS_SEGURO * 5; } 
         else if (energia == 100) { puntuacion_jugador -= 3 * PENALIZACION_DESTRUIDA; }
 
-        return puntuacion_jugador - puntuacion_oponente;
+        return puntuacion_jugador - puntuacion_oponente; // Devolvemos la diferencia de puntuaciones al finalizar
     }
 }
+
 
 double AIPlayer::ValoracionTest(const Parchis &estado, int jugador)
 {
