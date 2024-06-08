@@ -52,13 +52,6 @@ class AIPlayer: public Player{
          * @param dice Número de dado
          */
         virtual void think(color & c_piece,  int & id_piece, int & dice) const;
-        // TUTORIAL
-        void thinkAleatorio(color & c_piece,  int & id_piece, int & dice) const;
-        void thinkAleatorioMasInteligente(color & c_piece,  int & id_piece, int & dice) const;  
-        void thinkFichaMasAdelantada(color & c_piece,  int & id_piece, int & dice) const;
-        void thinkMejorOpcion(color & c_piece,  int & id_piece, int & dice) const;
-
-
         // poda alfa-beta
         double Poda_AlfaBeta(const Parchis &estado, int jugador, int profundidad, int profundidad_max, color &mejor_color, int &mejor_id, int &mejor_dado, double alpha, double beta, double (*heuristica)(const Parchis &, int))const;
         // heuristica(s)
